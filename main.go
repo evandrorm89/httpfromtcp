@@ -3,50 +3,55 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log"
-	"os"
+	"net"
 )
 
 func main() {
-	f, err := os.Open("messages.txt")
+	listener, err := net.Listen("tcp", "localhost:42069")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	receiver := getLinesChannel(f)
-
-	for line := range receiver {
-		fmt.Printf("read: %s\n", line)
+	defer listener.Close()
+	fmt.Println("Listening now on localhost:42069")
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("A TCP connection has been accepted")
+		for line := range getLinesChannel(conn) {
+			fmt.Printf("read: %s\n", line)
+		}
 	}
 }
 
-func getLinesChannel(f io.ReadCloser) <-chan string {
+func getLinesChannel(conn net.Conn) <-chan string {
 	ch := make(chan string, 1)
 
-	current_line := ""
+	currentLine := ""
 	go func() {
 		defer close(ch)
-		defer f.Close()
+		defer conn.Close()
 		for {
 			data := make([]byte, 8)
-			_, err := f.Read(data)
+			_, err := conn.Read(data)
 			if err != nil {
 				break
 			}
 
 			if i := bytes.IndexByte(data, '\n'); i != -1 {
-				current_line += string(data[:i])
+				currentLine += string(data[:i])
 				data = data[i+1:]
-				ch <- current_line
-				current_line = ""
+				ch <- currentLine
+				currentLine = ""
 			}
 
-			current_line += string(data)
+			currentLine += string(data)
 
 		}
-		if len(current_line) != 0 {
-			ch <- current_line
+		if len(currentLine) != 0 {
+			ch <- currentLine
 		}
 	}()
 
